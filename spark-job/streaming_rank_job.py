@@ -9,6 +9,13 @@ from datetime import datetime
 import pymysql
 from kafka import KafkaConsumer, KafkaProducer
 
+"""
+MVP 实时榜单作业：
+1. 生成模拟播放事件并发送到 Kafka；
+2. 消费事件并写入行为事实表；
+3. 按固定窗口聚合热度分，写入 minute 榜单快照。
+"""
+
 
 MYSQL_HOST = os.getenv("MYSQL_HOST", "localhost")
 MYSQL_PORT = int(os.getenv("MYSQL_PORT", "3306"))
@@ -23,6 +30,7 @@ SONG_IDS = ["S001", "S002", "S003", "S004", "S005"]
 
 
 def mysql_conn():
+    """创建 MySQL 连接，统一使用 utf8mb4 避免中文编码问题。"""
     return pymysql.connect(
         host=MYSQL_HOST,
         port=MYSQL_PORT,
@@ -35,6 +43,7 @@ def mysql_conn():
 
 
 def wait_dependencies():
+    """阻塞等待 MySQL 与 Kafka 就绪，避免作业启动即失败。"""
     while True:
         try:
             conn = mysql_conn()
@@ -59,6 +68,7 @@ def wait_dependencies():
 
 
 def create_task_log(conn, status, message):
+    """写入任务运行日志，供前端任务面板展示。"""
     now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     with conn.cursor() as cursor:
         cursor.execute(
@@ -81,6 +91,7 @@ def create_task_log(conn, status, message):
 
 
 def produce_events():
+    """持续生成模拟播放事件，作为实时链路输入。"""
     producer = KafkaProducer(
         bootstrap_servers=KAFKA_BOOTSTRAP_SERVERS,
         value_serializer=lambda v: json.dumps(v).encode("utf-8"),
@@ -101,6 +112,7 @@ def produce_events():
 
 
 def persist_event(conn, event):
+    """将消费到的事件落库到 fact_play_event。"""
     with conn.cursor() as cursor:
         cursor.execute(
             """
@@ -120,6 +132,7 @@ def persist_event(conn, event):
 
 
 def write_snapshot(conn, rank_rows):
+    """覆盖写入 minute 榜单快照。"""
     now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     with conn.cursor() as cursor:
         cursor.execute("DELETE FROM fact_rank_snapshot WHERE rank_type = 'minute'")
@@ -134,6 +147,7 @@ def write_snapshot(conn, rank_rows):
 
 
 def run_stream():
+    """消费事件并按窗口聚合计算热度榜。"""
     conn = mysql_conn()
     create_task_log(conn, "running", "streaming job started")
 
@@ -160,9 +174,11 @@ def run_stream():
         agg[song_id]["like_count"] += int(event.get("like_count", 0))
         agg[song_id]["comment_count"] += int(event.get("comment_count", 0))
 
+        # 每 15 秒输出一次快照，模拟分钟榜的近实时更新节奏
         if time.time() - window_start >= 15:
             rows = []
             for sid, stats in agg.items():
+                # MVP 热度口径：播放 + 点赞 + 评论加权
                 score = (
                     stats["play_count"] * 0.5
                     + stats["like_count"] * 0.25
@@ -177,6 +193,7 @@ def run_stream():
 
 
 def main():
+    """主入口：先等待依赖，再启动生产线程和消费主循环。"""
     wait_dependencies()
     producer_thread = threading.Thread(target=produce_events, daemon=True)
     producer_thread.start()
