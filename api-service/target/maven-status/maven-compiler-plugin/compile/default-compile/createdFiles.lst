@@ -1,0 +1,5 @@
+com/music/api/MusicApiApplication.class
+com/music/api/controller/DashboardController.class
+com/music/api/service/DashboardService.class
+com/music/api/controller/HealthController.class
+com/music/api/model/ApiResponse.class
