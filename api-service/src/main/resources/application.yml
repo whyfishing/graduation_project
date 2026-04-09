@@ -7,3 +7,8 @@ spring:
     username: ${SPRING_DATASOURCE_USERNAME:root}
     password: ${SPRING_DATASOURCE_PASSWORD:root}
     driver-class-name: com.mysql.cj.jdbc.Driver
+
+ai:
+  dashscope-base-url: ${AI_DASHSCOPE_BASE_URL:https://dashscope.aliyuncs.com/compatible-mode/v1}
+  dashscope-api-key: ${DASHSCOPE_API_KEY:}
+  model: ${AI_MODEL:qwen-plus}

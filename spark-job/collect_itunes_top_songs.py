@@ -70,6 +70,8 @@ def ensure_schema(conn):
             cursor.execute("ALTER TABLE dim_song ADD COLUMN platform_song_id VARCHAR(128)")
         if "album_name" not in existing:
             cursor.execute("ALTER TABLE dim_song ADD COLUMN album_name VARCHAR(256)")
+        if "lyric_text" not in existing:
+            cursor.execute("ALTER TABLE dim_song ADD COLUMN lyric_text LONGTEXT")
 
 
 def fetch_itunes_data():
@@ -109,6 +111,7 @@ def normalize_record(item):
         "duration_sec": None,
         "tags": tags[:512] if tags else None,
         "album_name": album_name[:256] if album_name else None,
+        "lyric_text": None,
         "region": "US",
         "style": tags.split(",")[0][:128] if tags else None,
         "source_platform": "itunes",
@@ -135,14 +138,15 @@ def upsert_song(conn, rec):
     with conn.cursor() as cursor:
         cursor.execute(
             """
-            INSERT INTO dim_song(song_id, song_name, artist_id, source_platform, platform_song_id, album_name, duration_sec, tags, publish_time)
-            VALUES(%s,%s,%s,%s,%s,%s,%s,%s,%s)
+            INSERT INTO dim_song(song_id, song_name, artist_id, source_platform, platform_song_id, album_name, lyric_text, duration_sec, tags, publish_time)
+            VALUES(%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
             ON DUPLICATE KEY UPDATE
               song_name=VALUES(song_name),
               artist_id=VALUES(artist_id),
               source_platform=VALUES(source_platform),
               platform_song_id=VALUES(platform_song_id),
               album_name=VALUES(album_name),
+              lyric_text=COALESCE(VALUES(lyric_text), lyric_text),
               duration_sec=VALUES(duration_sec),
               tags=VALUES(tags),
               publish_time=VALUES(publish_time)
@@ -154,6 +158,7 @@ def upsert_song(conn, rec):
                 rec["source_platform"],
                 rec["platform_song_id"],
                 rec["album_name"],
+                rec["lyric_text"],
                 rec["duration_sec"],
                 rec["tags"],
                 rec["publish_time"],

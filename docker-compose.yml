@@ -59,6 +59,8 @@ services:
       SPRING_DATASOURCE_USERNAME: root
       SPRING_DATASOURCE_PASSWORD: root
       SERVER_PORT: 8080
+      DASHSCOPE_API_KEY: ${DASHSCOPE_API_KEY:-}
+      AI_MODEL: ${AI_MODEL:-qwen-plus}
     ports:
       - "8080:8080"
 
@@ -79,6 +81,32 @@ services:
       MYSQL_PASSWORD: root
       KAFKA_BOOTSTRAP_SERVERS: kafka:29092
       KAFKA_TOPIC: music_play_event
+    restart: unless-stopped
+
+  netease-collector:
+    build:
+      context: ./spark-job
+    container_name: music-netease-collector
+    depends_on:
+      mysql:
+        condition: service_healthy
+    environment:
+      MYSQL_HOST: mysql
+      MYSQL_PORT: 3306
+      MYSQL_DB: music_system
+      MYSQL_USER: root
+      MYSQL_PASSWORD: root
+      NETEASE_TOPLIST_API: https://music.163.com/api/toplist/detail
+      NETEASE_PLAYLIST_DETAIL_API: https://music.163.com/api/v6/playlist/detail
+      NETEASE_SSL_VERIFY: "false"
+      NETEASE_TOP_LIMIT: 10
+      NETEASE_TRACK_LIMIT: 100
+    command:
+      [
+        "sh",
+        "-c",
+        "while true; do python collect_netease_platform_data.py --top-limit ${NETEASE_TOP_LIMIT:-10} --track-limit ${NETEASE_TRACK_LIMIT:-100}; sleep 86400; done",
+      ]
     restart: unless-stopped
 
   frontend:

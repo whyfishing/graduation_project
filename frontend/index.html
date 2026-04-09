@@ -3,61 +3,104 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>在线音乐信息系统 MVP 看板</title>
+  <title>网易云单平台音乐分析系统</title>
   <script src="https://cdn.jsdelivr.net/npm/echarts@5.5.1/dist/echarts.min.js"></script>
   <style>
     body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; margin: 0; background: #f7f8fa; color: #1f2328; }
-    .container { max-width: 1100px; margin: 0 auto; padding: 20px; }
+    .container { max-width: 1300px; margin: 0 auto; padding: 20px; }
     .card { background: #fff; border-radius: 12px; padding: 16px; margin-bottom: 16px; box-shadow: 0 2px 10px rgba(0, 0, 0, 0.06); }
-    .grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; }
+    .grid { display: grid; grid-template-columns: repeat(6, 1fr); gap: 12px; }
     .metric { padding: 12px; border-radius: 10px; background: #f1f5f9; }
     .metric h3 { margin: 0; font-size: 14px; color: #475569; font-weight: 600; }
     .metric p { margin: 8px 0 0; font-size: 22px; font-weight: 700; }
-    .toolbar { display: flex; gap: 8px; margin-bottom: 12px; }
+    .toolbar { display: flex; gap: 8px; margin-bottom: 12px; align-items: center; }
     button { border: none; border-radius: 8px; padding: 8px 12px; background: #2563eb; color: #fff; cursor: pointer; }
+    button.secondary { background: #334155; }
+    button.active { background: #0f766e; }
     table { width: 100%; border-collapse: collapse; }
     th, td { border-bottom: 1px solid #e5e7eb; padding: 10px 8px; text-align: left; font-size: 14px; }
     th { color: #64748b; font-weight: 600; }
     #chart { width: 100%; height: 320px; }
+    #tagChart { width: 100%; height: 280px; }
     .small { color: #6b7280; font-size: 13px; }
+    .layout { display: grid; grid-template-columns: 320px 1fr; gap: 16px; }
+    .list-item { border: 1px solid #e2e8f0; border-radius: 10px; padding: 10px; margin-bottom: 8px; cursor: pointer; }
+    .list-item:hover { border-color: #2563eb; }
+    .list-item.active { border-color: #0f766e; background: #ecfeff; }
+    .title-row { display: flex; justify-content: space-between; gap: 8px; align-items: center; }
+    .muted { color: #64748b; font-size: 12px; }
+    .lyric-box { max-height: 200px; overflow: auto; background: #f8fafc; border-radius: 10px; padding: 10px; white-space: pre-wrap; line-height: 1.6; }
+    .chip-wrap { display: flex; gap: 8px; flex-wrap: wrap; margin: 8px 0 12px; }
+    .chip { background: #dbeafe; color: #1e40af; border-radius: 999px; padding: 4px 10px; font-size: 12px; }
   </style>
 </head>
 <body>
   <div class="container">
     <div class="card">
-      <h2>在线音乐信息系统 MVP 看板</h2>
-      <p class="small">覆盖 FR-01/02/03/04/11 最小闭环：采集与流式作业持续写入，榜单分钟级更新。</p>
+      <h2>网易云单平台音乐分析系统</h2>
+      <p class="small">按需求文档实现“排行榜/歌单/歌手 -> 歌曲列表 -> 分析展示”闭环，支持歌词标签AI生成。</p>
       <div class="toolbar">
         <button onclick="refreshAll()">立即刷新</button>
+        <button id="tab-rank" class="secondary active" onclick="switchDomain('rank')">排行榜</button>
+        <button id="tab-playlist" class="secondary" onclick="switchDomain('playlist')">歌单</button>
+        <button id="tab-artist" class="secondary" onclick="switchDomain('artist')">歌手</button>
       </div>
       <div class="grid">
         <div class="metric"><h3>歌曲总数</h3><p id="songCount">-</p></div>
         <div class="metric"><h3>歌手总数</h3><p id="artistCount">-</p></div>
+        <div class="metric"><h3>歌单总数</h3><p id="playlistCount">-</p></div>
+        <div class="metric"><h3>榜单总数</h3><p id="rankCount">-</p></div>
         <div class="metric"><h3>行为事件数</h3><p id="playEventCount">-</p></div>
-        <div class="metric"><h3>榜单快照数</h3><p id="rankSnapshotCount">-</p></div>
+        <div class="metric"><h3>榜单明细数</h3><p id="rankSongCount">-</p></div>
       </div>
     </div>
 
     <div class="card">
-      <h3>实时榜单（Minute Top10）</h3>
-      <table>
-        <thead>
-          <tr>
-            <th>排名</th>
-            <th>歌曲ID</th>
-            <th>歌曲名</th>
-            <th>歌手</th>
-            <th>热度分</th>
-            <th>快照时间</th>
-          </tr>
-        </thead>
-        <tbody id="rankingBody"></tbody>
-      </table>
+      <div class="layout">
+        <div>
+          <h3 id="leftTitle">推荐列表</h3>
+          <div id="recommendList"></div>
+        </div>
+        <div>
+          <h3 id="songsTitle">歌曲列表</h3>
+          <table>
+            <thead>
+              <tr>
+                <th>序号</th>
+                <th>歌曲ID</th>
+                <th>歌曲名</th>
+                <th>歌手</th>
+                <th>得分/时间</th>
+              </tr>
+            </thead>
+            <tbody id="songBody"></tbody>
+          </table>
+          <div id="chart"></div>
+        </div>
+      </div>
     </div>
 
     <div class="card">
-      <h3>热度趋势图</h3>
-      <div id="chart"></div>
+      <div class="title-row">
+        <h3>歌曲画像分析</h3>
+        <button onclick="generateTagsForCurrentSong()">AI生成标签</button>
+      </div>
+      <p id="analysisSong" class="small">请选择歌曲查看分析</p>
+      <div class="chip-wrap" id="tagChips"></div>
+      <div id="tagChart"></div>
+      <h4>歌词</h4>
+      <div class="lyric-box" id="lyricText">-</div>
+      <h4>相似歌曲推荐</h4>
+      <table>
+        <thead>
+          <tr>
+            <th>歌曲ID</th>
+            <th>歌曲名</th>
+            <th>相似度</th>
+          </tr>
+        </thead>
+        <tbody id="similarBody"></tbody>
+      </table>
     </div>
 
     <div class="card">
@@ -80,7 +123,12 @@
 
   <script>
     const API_BASE = "http://localhost:8080/api/v1";
-    const chart = echarts.init(document.getElementById("chart"));
+    const scoreChart = echarts.init(document.getElementById("chart"));
+    const tagChart = echarts.init(document.getElementById("tagChart"));
+    let currentDomain = "rank";
+    let currentRecommendId = null;
+    let currentSongs = [];
+    let currentSongId = null;
 
     async function fetchJson(url) {
       const res = await fetch(url);
@@ -95,31 +143,152 @@
       const data = json.data || {};
       document.getElementById("songCount").innerText = data.songCount ?? 0;
       document.getElementById("artistCount").innerText = data.artistCount ?? 0;
+      document.getElementById("playlistCount").innerText = data.playlistCount ?? 0;
+      document.getElementById("rankCount").innerText = data.rankCount ?? 0;
       document.getElementById("playEventCount").innerText = data.playEventCount ?? 0;
-      document.getElementById("rankSnapshotCount").innerText = data.rankSnapshotCount ?? 0;
+      document.getElementById("rankSongCount").innerText = data.rankSongCount ?? 0;
+    }
+
+    function renderScoreChart(rows) {
+      const names = rows.map(r => r.song_name || r.song_id || "-");
+      const values = rows.map(r => Number(r.score || r.rank_position || 0));
+      scoreChart.setOption({
+        tooltip: { trigger: "axis" },
+        xAxis: { type: "category", data: names },
+        yAxis: { type: "value" },
+        series: [{ type: "bar", data: values, name: "热度/排名指标" }]
+      });
+    }
+
+    function renderRecommendList(rows) {
+      const list = document.getElementById("recommendList");
+      list.innerHTML = rows.map(item => {
+        const id = item.rank_id || item.playlist_id || item.artist_id;
+        const name = item.rank_name || item.playlist_name || item.artist_name || id;
+        const meta = item.rank_category || `歌曲数: ${item.song_count ?? item.track_count ?? 0}`;
+        const activeClass = id === currentRecommendId ? "list-item active" : "list-item";
+        return `<div class="${activeClass}" onclick="selectRecommend('${id}')">
+          <div class="title-row"><strong>${name}</strong><span class="muted">${id}</span></div>
+          <div class="muted">${meta || "-"}</div>
+        </div>`;
+      }).join("");
+    }
+
+    async function loadDomainRecommendations() {
+      if (currentDomain === "rank") {
+        document.getElementById("leftTitle").innerText = "榜单推荐";
+        document.getElementById("songsTitle").innerText = "榜单歌曲列表";
+        const json = await fetchJson(`${API_BASE}/ranks/recommend?limit=20`);
+        const rows = json.data || [];
+        renderRecommendList(rows);
+        if (!currentRecommendId && rows[0]) {
+          currentRecommendId = rows[0].rank_id;
+        }
+      } else if (currentDomain === "playlist") {
+        document.getElementById("leftTitle").innerText = "歌单推荐";
+        document.getElementById("songsTitle").innerText = "歌单歌曲列表";
+        const json = await fetchJson(`${API_BASE}/playlists/recommend?limit=20`);
+        const rows = json.data || [];
+        renderRecommendList(rows);
+        if (!currentRecommendId && rows[0]) {
+          currentRecommendId = rows[0].playlist_id;
+        }
+      } else {
+        document.getElementById("leftTitle").innerText = "歌手推荐";
+        document.getElementById("songsTitle").innerText = "歌手代表歌曲";
+        const json = await fetchJson(`${API_BASE}/artists/recommend?limit=20`);
+        const rows = json.data || [];
+        renderRecommendList(rows);
+        if (!currentRecommendId && rows[0]) {
+          currentRecommendId = rows[0].artist_id;
+        }
+      }
+      if (currentRecommendId) {
+        await loadDomainSongs();
+      }
+    }
+
+    async function loadDomainSongs() {
+      let url = "";
+      if (currentDomain === "rank") {
+        url = `${API_BASE}/ranks/${currentRecommendId}/songs?limit=100`;
+      } else if (currentDomain === "playlist") {
+        url = `${API_BASE}/playlists/${currentRecommendId}/songs?limit=100`;
+      } else {
+        url = `${API_BASE}/artists/${currentRecommendId}/songs?limit=100`;
+      }
+      const json = await fetchJson(url);
+      currentSongs = json.data || [];
+      const tbody = document.getElementById("songBody");
+      tbody.innerHTML = currentSongs.map((r, i) => `
+        <tr>
+          <td>${r.rank_position || r.position || i + 1}</td>
+          <td>${r.song_id || "-"}</td>
+          <td>${r.song_name || "-"}</td>
+          <td>${r.artist_name || "-"}</td>
+          <td>${r.score || r.crawl_time || r.publish_time || "-"}</td>
+        </tr>
+      `).join("");
+      renderScoreChart(currentSongs);
+      if (currentSongs[0] && currentSongs[0].song_id) {
+        await selectSong(currentSongs[0].song_id);
+      }
+    }
+
+    async function selectRecommend(id) {
+      currentRecommendId = id;
+      await loadDomainRecommendations();
+    }
+
+    function switchDomain(domain) {
+      currentDomain = domain;
+      currentRecommendId = null;
+      document.getElementById("tab-rank").classList.toggle("active", domain === "rank");
+      document.getElementById("tab-playlist").classList.toggle("active", domain === "playlist");
+      document.getElementById("tab-artist").classList.toggle("active", domain === "artist");
+      loadDomainRecommendations();
+    }
+
+    async function selectSong(songId) {
+      if (!songId) return;
+      currentSongId = songId;
+      const json = await fetchJson(`${API_BASE}/songs/${songId}/analysis`);
+      const data = json.data || {};
+      const song = data.song || {};
+      const tags = data.tags || [];
+      const similar = data.similarSongs || [];
+      document.getElementById("analysisSong").innerText = `${song.song_name || "-"}（${song.song_id || "-"}）`;
+      document.getElementById("lyricText").innerText = song.lyric_text || "暂无歌词";
+      const chips = document.getElementById("tagChips");
+      chips.innerHTML = tags.map(t => `<span class="chip">${t.tag_name}</span>`).join("") || "<span class='muted'>暂无标签</span>";
+      tagChart.setOption({
+        tooltip: { trigger: "item" },
+        series: [{
+          type: "pie",
+          radius: ["35%", "70%"],
+          data: tags.map(t => ({ name: t.tag_name, value: Number(t.score || 0) }))
+        }]
+      });
+      document.getElementById("similarBody").innerHTML = similar.map(s => `
+        <tr>
+          <td>${s.song_id}</td>
+          <td>${s.song_name}</td>
+          <td>${s.similarity_score}</td>
+        </tr>
+      `).join("");
+    }
+
+    async function generateTagsForCurrentSong() {
+      if (!currentSongId) return;
+      const res = await fetch(`${API_BASE}/songs/${currentSongId}/tags/generate`, { method: "POST" });
+      if (!res.ok) throw new Error(`generate tags failed: ${res.status}`);
+      await selectSong(currentSongId);
     }
 
     async function loadRankings() {
       const json = await fetchJson(`${API_BASE}/rankings?rankType=minute&limit=10`);
       const rows = json.data || [];
-      const tbody = document.getElementById("rankingBody");
-      tbody.innerHTML = rows.map(r => `
-        <tr>
-          <td>${r.rank_position}</td>
-          <td>${r.song_id || "-"}</td>
-          <td>${r.song_name || "-"}</td>
-          <td>${r.artist_name || "-"}</td>
-          <td>${r.score}</td>
-          <td>${r.rank_time || "-"}</td>
-        </tr>
-      `).join("");
-
-      chart.setOption({
-        tooltip: { trigger: "axis" },
-        xAxis: { type: "category", data: rows.map(r => r.song_name || r.song_id) },
-        yAxis: { type: "value" },
-        series: [{ type: "bar", data: rows.map(r => r.score), name: "热度分" }]
-      });
+      renderScoreChart(rows);
     }
 
     async function loadTasks() {
@@ -140,14 +309,19 @@
 
     async function refreshAll() {
       try {
-        await Promise.all([loadOverview(), loadRankings(), loadTasks()]);
+        await Promise.all([loadOverview(), loadTasks(), loadRankings()]);
+        await loadDomainRecommendations();
       } catch (e) {
         console.error(e);
       }
     }
 
     refreshAll();
-    setInterval(refreshAll, 10000);
+    setInterval(loadTasks, 15000);
+    window.switchDomain = switchDomain;
+    window.selectRecommend = selectRecommend;
+    window.selectSong = selectSong;
+    window.generateTagsForCurrentSong = generateTagsForCurrentSong;
   </script>
 </body>
 </html>

@@ -196,6 +196,7 @@ CREATE TABLE IF NOT EXISTS dim_song (
   source_platform VARCHAR(32) DEFAULT 'manual',
   platform_song_id VARCHAR(128),
   album_name VARCHAR(256),
+  lyric_text LONGTEXT,
   duration_sec INT,
   tags VARCHAR(512),
   publish_time DATETIME,
@@ -272,10 +273,10 @@ INSERT INTO dim_artist (artist_id, artist_name, region, style) VALUES
 ('A003', '邓紫棋', '中国香港', '流行')
 ON DUPLICATE KEY UPDATE artist_name = VALUES(artist_name);
 
-INSERT INTO dim_song (song_id, song_name, artist_id, source_platform, platform_song_id, album_name, duration_sec, tags, publish_time) VALUES
-('S001', '七里香', 'A001', 'manual', 'S001', NULL, 299, '华语,流行', '2004-08-03 00:00:00'),
-('S002', '十年', 'A002', 'manual', 'S002', NULL, 210, '华语,抒情', '2003-04-15 00:00:00'),
-('S003', '光年之外', 'A003', 'manual', 'S003', NULL, 235, '华语,流行', '2016-12-30 00:00:00'),
-('S004', '夜曲', 'A001', 'manual', 'S004', NULL, 224, '华语,流行', '2005-11-01 00:00:00'),
-('S005', '孤勇者', 'A002', 'manual', 'S005', NULL, 246, '华语,热歌', '2021-11-08 00:00:00')
+INSERT INTO dim_song (song_id, song_name, artist_id, source_platform, platform_song_id, album_name, lyric_text, duration_sec, tags, publish_time) VALUES
+('S001', '七里香', 'A001', 'manual', 'S001', NULL, NULL, 299, '华语,流行', '2004-08-03 00:00:00'),
+('S002', '十年', 'A002', 'manual', 'S002', NULL, NULL, 210, '华语,抒情', '2003-04-15 00:00:00'),
+('S003', '光年之外', 'A003', 'manual', 'S003', NULL, NULL, 235, '华语,流行', '2016-12-30 00:00:00'),
+('S004', '夜曲', 'A001', 'manual', 'S004', NULL, NULL, 224, '华语,流行', '2005-11-01 00:00:00'),
+('S005', '孤勇者', 'A002', 'manual', 'S005', NULL, NULL, 246, '华语,热歌', '2021-11-08 00:00:00')
 ON DUPLICATE KEY UPDATE song_name = VALUES(song_name);
