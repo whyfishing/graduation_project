@@ -13,14 +13,21 @@
     .metric { padding: 12px; border-radius: 10px; background: #f1f5f9; }
     .metric h3 { margin: 0; font-size: 14px; color: #475569; font-weight: 600; }
     .metric p { margin: 8px 0 0; font-size: 22px; font-weight: 700; }
-    .toolbar { display: flex; gap: 8px; margin-bottom: 12px; align-items: center; }
+    .toolbar { display: flex; gap: 8px; margin-bottom: 12px; align-items: center; justify-content: space-between; }
+    .toolbar-left { display: flex; gap: 8px; align-items: center; }
+    .menu-wrap { position: relative; }
+    .menu-panel { position: absolute; right: 0; top: 38px; min-width: 180px; background: #fff; border: 1px solid #e2e8f0; border-radius: 10px; box-shadow: 0 8px 20px rgba(0,0,0,0.12); display: none; z-index: 20; }
+    .menu-wrap.open .menu-panel { display: block; }
+    .menu-item { width: 100%; text-align: left; background: #fff; color: #0f172a; border-radius: 0; padding: 10px 12px; border-bottom: 1px solid #e5e7eb; }
+    .menu-item:last-child { border-bottom: none; }
+    .menu-item:hover { background: #f8fafc; }
+    .menu-item.disabled { color: #94a3b8; cursor: default; }
     button { border: none; border-radius: 8px; padding: 8px 12px; background: #2563eb; color: #fff; cursor: pointer; }
     button.secondary { background: #334155; }
     button.active { background: #0f766e; }
     table { width: 100%; border-collapse: collapse; }
     th, td { border-bottom: 1px solid #e5e7eb; padding: 10px 8px; text-align: left; font-size: 14px; }
     th { color: #64748b; font-weight: 600; }
-    #chart { width: 100%; height: 320px; }
     #tagChart { width: 100%; height: 280px; }
     .small { color: #6b7280; font-size: 13px; }
     .layout { display: grid; grid-template-columns: 320px 1fr; gap: 16px; }
@@ -39,6 +46,7 @@
     .chip-wrap { display: flex; gap: 8px; flex-wrap: wrap; margin: 8px 0 12px; }
     .chip { background: #dbeafe; color: #1e40af; border-radius: 999px; padding: 4px 10px; font-size: 12px; }
     .player-box { border: 1px solid #e2e8f0; border-radius: 10px; padding: 12px; background: #fff; margin-bottom: 10px; }
+    #taskCard { display: none; }
   </style>
 </head>
 <body>
@@ -47,10 +55,18 @@
       <h2>网易云单平台音乐分析系统</h2>
       <p class="small">按需求文档实现“排行榜/歌单/歌手 -> 歌曲列表 -> 分析展示”闭环，支持歌词标签AI生成。</p>
       <div class="toolbar">
-        <button onclick="refreshAll()">立即刷新</button>
-        <button id="tab-rank" class="secondary active" onclick="switchDomain('rank')">排行榜</button>
-        <button id="tab-playlist" class="secondary" onclick="switchDomain('playlist')">歌单</button>
-        <button id="tab-artist" class="secondary" onclick="switchDomain('artist')">歌手</button>
+        <div class="toolbar-left">
+          <button id="tab-rank" class="secondary active" onclick="switchDomain('rank')">排行榜</button>
+          <button id="tab-playlist" class="secondary" onclick="switchDomain('playlist')">歌单</button>
+          <button id="tab-artist" class="secondary" onclick="switchDomain('artist')">歌手</button>
+        </div>
+        <div class="menu-wrap" id="settingsMenu">
+          <button class="secondary" onclick="toggleSettingsMenu()">设置</button>
+          <div class="menu-panel">
+            <button class="menu-item" onclick="toggleTaskPanel()">任务日志</button>
+            <button class="menu-item disabled">更多功能（预留）</button>
+          </div>
+        </div>
       </div>
       <div class="grid">
         <div class="metric"><h3>歌曲总数</h3><p id="songCount">-</p></div>
@@ -65,7 +81,10 @@
     <div class="card" id="detailPage" style="display:none;">
       <div class="title-row">
         <h3 id="detailSongName">歌曲详情</h3>
-        <button class="secondary" onclick="backToList()">返回列表</button>
+        <div class="toolbar-left">
+          <button onclick="generateTagsForCurrentSong()">AI生成标签</button>
+          <button class="secondary" onclick="backToList()">返回列表</button>
+        </div>
       </div>
       <p id="detailArtist" class="small">歌手：-</p>
       <div class="player-box">
@@ -73,6 +92,19 @@
       </div>
       <h4>歌词</h4>
       <div class="lyric-box" id="detailLyric">-</div>
+      <h4>标签画像</h4>
+      <div class="chip-wrap" id="detailTagChips"></div>
+      <div id="tagChart"></div>
+      <h4>相似歌曲推荐</h4>
+      <table>
+        <thead>
+          <tr>
+            <th>歌曲名</th>
+            <th>相似度</th>
+          </tr>
+        </thead>
+        <tbody id="detailSimilarBody"></tbody>
+      </table>
     </div>
 
     <div class="card" id="listCard">
@@ -96,32 +128,8 @@
               <tbody id="songBody"></tbody>
             </table>
           </div>
-          <div id="chart"></div>
         </div>
       </div>
-    </div>
-
-    <div class="card" id="analysisCard">
-      <div class="title-row">
-        <h3>歌曲画像分析</h3>
-        <button onclick="generateTagsForCurrentSong()">AI生成标签</button>
-      </div>
-      <p id="analysisSong" class="small">请选择歌曲查看分析</p>
-      <div class="chip-wrap" id="tagChips"></div>
-      <div id="tagChart"></div>
-      <h4>歌词</h4>
-      <div class="lyric-box" id="lyricText">-</div>
-      <h4>相似歌曲推荐</h4>
-      <table>
-        <thead>
-          <tr>
-            <th>歌曲ID</th>
-            <th>歌曲名</th>
-            <th>相似度</th>
-          </tr>
-        </thead>
-        <tbody id="similarBody"></tbody>
-      </table>
     </div>
 
     <div class="card" id="taskCard">
@@ -144,12 +152,11 @@
 
   <script>
     const API_BASE = "http://localhost:8080/api/v1";
-    const scoreChart = echarts.init(document.getElementById("chart"));
     const tagChart = echarts.init(document.getElementById("tagChart"));
     let currentDomain = "rank";
     let currentRecommendId = null;
-    let currentSongs = [];
     let currentSongId = null;
+    let taskPanelVisible = false;
 
     function formatDuration(seconds) {
       const value = Number(seconds || 0);
@@ -186,26 +193,21 @@
       document.getElementById("rankSongCount").innerText = data.rankSongCount ?? 0;
     }
 
-    function renderScoreChart(rows) {
-      const names = rows.map(r => r.song_name || r.song_id || "-");
-      const values = rows.map(r => Number(r.score || r.rank_position || 0));
-      scoreChart.setOption({
-        tooltip: { trigger: "axis" },
-        xAxis: { type: "category", data: names },
-        yAxis: { type: "value" },
-        series: [{ type: "bar", data: values, name: "热度/排名指标" }]
-      });
-    }
-
     function renderRecommendList(rows) {
       const list = document.getElementById("recommendList");
       list.innerHTML = rows.map(item => {
         const id = item.rank_id || item.playlist_id || item.artist_id;
         const name = item.rank_name || item.playlist_name || item.artist_name || id;
         const meta = item.rank_category || `歌曲数: ${item.song_count ?? item.track_count ?? 0}`;
+        let rightText = "";
+        if (currentDomain === "rank") {
+          rightText = item.play_count ? `播放量 ${Number(item.play_count).toLocaleString()}` : "-";
+        } else if (currentDomain === "playlist") {
+          rightText = item.play_count ? `播放量 ${Number(item.play_count).toLocaleString()}` : "-";
+        }
         const activeClass = id === currentRecommendId ? "list-item active" : "list-item";
         return `<div class="${activeClass}" onclick="selectRecommend('${id}')">
-          <div class="title-row"><strong>${name}</strong><span class="muted">${id}</span></div>
+          <div class="title-row"><strong>${name}</strong><span class="muted">${rightText}</span></div>
           <div class="muted">${meta || "-"}</div>
         </div>`;
       }).join("");
@@ -255,7 +257,7 @@
         url = `${API_BASE}/artists/${currentRecommendId}/songs?limit=100`;
       }
       const json = await fetchJson(url);
-      currentSongs = json.data || [];
+      const currentSongs = json.data || [];
       const tbody = document.getElementById("songBody");
       tbody.innerHTML = currentSongs.map((r, i) => `
         <tr class="song-row" onclick="selectSong('${r.song_id || ""}')">
@@ -265,10 +267,6 @@
           <td>${formatDuration(r.duration_sec)}</td>
         </tr>
       `).join("");
-      renderScoreChart(currentSongs);
-      if (currentSongs[0] && currentSongs[0].song_id) {
-        await selectSong(currentSongs[0].song_id);
-      }
     }
 
     async function selectRecommend(id) {
@@ -288,16 +286,27 @@
     async function selectSong(songId) {
       if (!songId) return;
       currentSongId = songId;
+      window.open(buildDetailUrl(songId), "_blank", "noopener");
+    }
+
+    async function loadSongDetailPage(songId) {
       const json = await fetchJson(`${API_BASE}/songs/${songId}/analysis`);
       const data = json.data || {};
       const song = data.song || {};
       const tags = data.tags || [];
       const similar = data.similarSongs || [];
-      const artistNames = song.artist_names || "未知歌手";
-      document.getElementById("analysisSong").innerText = `${song.song_name || "-"}｜${artistNames}`;
-      document.getElementById("lyricText").innerText = song.lyric_text || "暂无歌词";
-      const chips = document.getElementById("tagChips");
-      chips.innerHTML = tags.map(t => `<span class="chip">${t.tag_name}</span>`).join("") || "<span class='muted'>暂无标签</span>";
+      const detailSongName = document.getElementById("detailSongName");
+      const detailArtist = document.getElementById("detailArtist");
+      const detailLyric = document.getElementById("detailLyric");
+      const detailPlayer = document.getElementById("detailPlayer");
+      const detailTagChips = document.getElementById("detailTagChips");
+      const detailSimilarBody = document.getElementById("detailSimilarBody");
+      currentSongId = songId;
+      detailSongName.innerText = song.song_name || songId;
+      detailArtist.innerText = `歌手：${song.artist_names || "未知歌手"}`;
+      detailLyric.innerText = song.lyric_text || "暂无歌词";
+      detailPlayer.src = buildPlayerUrl(songId);
+      detailTagChips.innerHTML = tags.map(t => `<span class="chip">${t.tag_name}</span>`).join("") || "<span class='muted'>暂无标签</span>";
       tagChart.setOption({
         tooltip: { trigger: "item" },
         series: [{
@@ -306,33 +315,17 @@
           data: tags.map(t => ({ name: t.tag_name, value: Number(t.score || 0) }))
         }]
       });
-      document.getElementById("similarBody").innerHTML = similar.map(s => `
+      detailSimilarBody.innerHTML = similar.map(s => `
         <tr>
-          <td>${s.song_id}</td>
           <td><a class="song-link" href="${buildDetailUrl(s.song_id)}" target="_blank" rel="noopener">${s.song_name}</a></td>
           <td>${s.similarity_score}</td>
         </tr>
       `).join("");
     }
 
-    async function loadSongDetailPage(songId) {
-      const json = await fetchJson(`${API_BASE}/songs/${songId}/analysis`);
-      const data = json.data || {};
-      const song = data.song || {};
-      const detailSongName = document.getElementById("detailSongName");
-      const detailArtist = document.getElementById("detailArtist");
-      const detailLyric = document.getElementById("detailLyric");
-      const detailPlayer = document.getElementById("detailPlayer");
-      detailSongName.innerText = song.song_name || songId;
-      detailArtist.innerText = `歌手：${song.artist_names || "未知歌手"}`;
-      detailLyric.innerText = song.lyric_text || "暂无歌词";
-      detailPlayer.src = buildPlayerUrl(songId);
-    }
-
     function showDetailMode() {
       document.getElementById("overviewCard").style.display = "none";
       document.getElementById("listCard").style.display = "none";
-      document.getElementById("analysisCard").style.display = "none";
       document.getElementById("taskCard").style.display = "none";
       document.getElementById("detailPage").style.display = "block";
     }
@@ -345,13 +338,9 @@
       if (!currentSongId) return;
       const res = await fetch(`${API_BASE}/songs/${currentSongId}/tags/generate`, { method: "POST" });
       if (!res.ok) throw new Error(`generate tags failed: ${res.status}`);
-      await selectSong(currentSongId);
-    }
-
-    async function loadRankings() {
-      const json = await fetchJson(`${API_BASE}/rankings?rankType=minute&limit=10`);
-      const rows = json.data || [];
-      renderScoreChart(rows);
+      if (new URLSearchParams(window.location.search).get("songId")) {
+        await loadSongDetailPage(currentSongId);
+      }
     }
 
     async function loadTasks() {
@@ -372,12 +361,32 @@
 
     async function refreshAll() {
       try {
-        await Promise.all([loadOverview(), loadTasks(), loadRankings()]);
+        await Promise.all([loadOverview(), loadTasks()]);
         await loadDomainRecommendations();
       } catch (e) {
         console.error(e);
       }
     }
+
+    function toggleTaskPanel() {
+      taskPanelVisible = !taskPanelVisible;
+      document.getElementById("taskCard").style.display = taskPanelVisible ? "block" : "none";
+      if (taskPanelVisible) {
+        loadTasks();
+      }
+      document.getElementById("settingsMenu").classList.remove("open");
+    }
+
+    function toggleSettingsMenu() {
+      document.getElementById("settingsMenu").classList.toggle("open");
+    }
+
+    document.addEventListener("click", (event) => {
+      const menu = document.getElementById("settingsMenu");
+      if (!menu.contains(event.target)) {
+        menu.classList.remove("open");
+      }
+    });
 
     async function initPage() {
       const songId = new URLSearchParams(window.location.search).get("songId");
@@ -396,6 +405,8 @@
     window.selectSong = selectSong;
     window.generateTagsForCurrentSong = generateTagsForCurrentSong;
     window.backToList = backToList;
+    window.toggleTaskPanel = toggleTaskPanel;
+    window.toggleSettingsMenu = toggleSettingsMenu;
   </script>
 </body>
 </html>

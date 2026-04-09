@@ -26,6 +26,7 @@ NETEASE_PLAYLIST_DETAIL_API = os.getenv(
     "https://music.163.com/api/v6/playlist/detail",
 )
 NETEASE_PLAYLIST_LIST_API = os.getenv("NETEASE_PLAYLIST_LIST_API", "https://music.163.com/api/playlist/list")
+NETEASE_SONG_DETAIL_API = os.getenv("NETEASE_SONG_DETAIL_API", "https://music.163.com/api/v3/song/detail")
 NETEASE_LYRIC_API = os.getenv("NETEASE_LYRIC_API", "https://music.163.com/api/song/lyric")
 NETEASE_ARTIST_TOP_API = os.getenv("NETEASE_ARTIST_TOP_API", "https://music.163.com/api/artist/top")
 NETEASE_ARTIST_TOP_SONG_API = os.getenv("NETEASE_ARTIST_TOP_SONG_API", "https://music.163.com/api/artist/top/song")
@@ -116,6 +117,7 @@ def ensure_required_tables(conn):
               rank_id VARCHAR(32) PRIMARY KEY,
               rank_name VARCHAR(128) NOT NULL,
               rank_order INT NOT NULL DEFAULT 9999,
+              play_count BIGINT,
               rank_url VARCHAR(512),
               rank_category VARCHAR(64),
               update_cycle VARCHAR(32),
@@ -221,6 +223,8 @@ def ensure_required_tables(conn):
         rank_columns = {row[0] for row in cursor.fetchall()}
         if "rank_order" not in rank_columns:
             cursor.execute("ALTER TABLE ranks ADD COLUMN rank_order INT NOT NULL DEFAULT 9999")
+        if "play_count" not in rank_columns:
+            cursor.execute("ALTER TABLE ranks ADD COLUMN play_count BIGINT")
         cursor.execute(
             """
             SELECT column_name
@@ -296,6 +300,7 @@ def fetch_toplists(limit):
                 "rank_url": f"https://music.163.com/#/discover/toplist?id={rank_id}",
                 "rank_category": "官方榜" if item.get("ToplistType") else "特色榜",
                 "update_cycle": (item.get("updateFrequency") or "")[:32] or None,
+                "play_count": int(item.get("playCount") or 0),
                 "_source_index": idx,
             }
         )
@@ -353,12 +358,37 @@ def fetch_playlist_cards(limit):
 
 
 def fetch_playlist_tracks(playlist_id, track_limit):
-    query = urllib.parse.urlencode({"id": playlist_id, "n": max(track_limit, 100), "s": 0})
+    target_limit = max(track_limit, 20)
+    query = urllib.parse.urlencode({"id": playlist_id, "n": max(track_limit, 20), "s": 0})
     url = f"{NETEASE_PLAYLIST_DETAIL_API}?{query}"
     body = http_get_json(url)
     playlist = body.get("playlist") or {}
     tracks = playlist.get("tracks") or []
-    return tracks[:track_limit], playlist
+    if len(tracks) >= target_limit:
+        return tracks[:target_limit], playlist
+    track_ids = [item.get("id") for item in (playlist.get("trackIds") or []) if item.get("id")]
+    missing = target_limit - len(tracks)
+    if missing > 0 and track_ids:
+        existing_ids = {str(item.get("id")) for item in tracks if item.get("id")}
+        candidate_ids = [sid for sid in track_ids if str(sid) not in existing_ids][:missing]
+        if candidate_ids:
+            detail_tracks = fetch_song_details(candidate_ids)
+            tracks.extend(detail_tracks)
+    return tracks[:target_limit], playlist
+
+
+def fetch_song_details(song_ids):
+    if not song_ids:
+        return []
+    ids_str = ",".join([str(sid) for sid in song_ids])
+    c_value = json.dumps([{"id": int(sid)} for sid in song_ids], ensure_ascii=False)
+    query = urllib.parse.urlencode({"ids": ids_str, "c": c_value})
+    url = f"{NETEASE_SONG_DETAIL_API}?{query}"
+    try:
+        body = http_get_json(url)
+    except Exception:
+        return []
+    return body.get("songs") or []
 
 
 def fetch_top_artists(limit):
@@ -475,11 +505,12 @@ def upsert_rank(conn, rec):
     with conn.cursor() as cursor:
         cursor.execute(
             """
-            INSERT INTO ranks(rank_id, rank_name, rank_order, rank_url, rank_category, update_cycle)
-            VALUES(%s,%s,%s,%s,%s,%s)
+            INSERT INTO ranks(rank_id, rank_name, rank_order, play_count, rank_url, rank_category, update_cycle)
+            VALUES(%s,%s,%s,%s,%s,%s,%s)
             ON DUPLICATE KEY UPDATE
               rank_name=VALUES(rank_name),
               rank_order=VALUES(rank_order),
+              play_count=VALUES(play_count),
               rank_url=VALUES(rank_url),
               rank_category=VALUES(rank_category),
               update_cycle=VALUES(update_cycle)
@@ -488,6 +519,7 @@ def upsert_rank(conn, rec):
                 rec["rank_id"],
                 rec["rank_name"],
                 rec["rank_order"],
+                rec["play_count"],
                 rec["rank_url"],
                 rec["rank_category"],
                 rec["update_cycle"],

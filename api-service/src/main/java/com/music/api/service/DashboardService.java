@@ -59,10 +59,10 @@ public class DashboardService {
 
     public List<Map<String, Object>> getRankRecommendations(int limit) {
         String sql = """
-                SELECT r.rank_id, r.rank_name, r.rank_category, r.update_cycle, MAX(rs.crawl_time) AS latest_crawl_time, COUNT(rs.id) AS song_count
+                SELECT r.rank_id, r.rank_name, r.rank_category, r.update_cycle, r.play_count, MAX(rs.crawl_time) AS latest_crawl_time, COUNT(rs.id) AS song_count
                 FROM ranks r
                 LEFT JOIN rank_songs rs ON rs.rank_id = r.rank_id
-                GROUP BY r.rank_id, r.rank_name, r.rank_category, r.update_cycle, r.rank_order
+                GROUP BY r.rank_id, r.rank_name, r.rank_category, r.update_cycle, r.rank_order, r.play_count
                 ORDER BY COALESCE(r.rank_order, 9999) ASC, latest_crawl_time DESC
                 LIMIT ?
                 """;
