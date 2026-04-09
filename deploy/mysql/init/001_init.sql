@@ -49,6 +49,7 @@ CREATE TABLE IF NOT EXISTS playlists (
 CREATE TABLE IF NOT EXISTS ranks (
   rank_id VARCHAR(32) PRIMARY KEY,
   rank_name VARCHAR(128) NOT NULL,
+  rank_order INT NOT NULL DEFAULT 9999,
   rank_url VARCHAR(512),
   rank_category VARCHAR(64),
   update_cycle VARCHAR(32),

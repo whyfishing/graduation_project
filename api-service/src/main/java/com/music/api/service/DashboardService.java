@@ -62,8 +62,8 @@ public class DashboardService {
                 SELECT r.rank_id, r.rank_name, r.rank_category, r.update_cycle, MAX(rs.crawl_time) AS latest_crawl_time, COUNT(rs.id) AS song_count
                 FROM ranks r
                 LEFT JOIN rank_songs rs ON rs.rank_id = r.rank_id
-                GROUP BY r.rank_id, r.rank_name, r.rank_category, r.update_cycle
-                ORDER BY latest_crawl_time DESC
+                GROUP BY r.rank_id, r.rank_name, r.rank_category, r.update_cycle, r.rank_order
+                ORDER BY COALESCE(r.rank_order, 9999) ASC, latest_crawl_time DESC
                 LIMIT ?
                 """;
         return jdbcTemplate.queryForList(sql, limit);
@@ -71,13 +71,16 @@ public class DashboardService {
 
     public List<Map<String, Object>> getRankSongs(String rankId, int limit) {
         String sql = """
-                SELECT rs.rank_position, s.song_id, s.song_name, a.artist_name, rs.score, rs.crawl_time
+                SELECT rs.rank_position, s.song_id, s.song_name,
+                       COALESCE(GROUP_CONCAT(DISTINCT a.artist_name ORDER BY a.artist_name SEPARATOR ' / '), '未知歌手') AS artist_name,
+                       s.duration_sec
                 FROM rank_songs rs
                 JOIN songs s ON rs.song_id = s.song_id
                 LEFT JOIN artist_songs ars ON ars.song_id = s.song_id
                 LEFT JOIN artists a ON a.artist_id = ars.artist_id
                 WHERE rs.rank_id = ?
                   AND rs.crawl_time = (SELECT MAX(crawl_time) FROM rank_songs WHERE rank_id = ?)
+                GROUP BY rs.rank_position, s.song_id, s.song_name, s.duration_sec
                 ORDER BY rs.rank_position ASC
                 LIMIT ?
                 """;
@@ -96,12 +99,15 @@ public class DashboardService {
 
     public List<Map<String, Object>> getPlaylistSongs(String playlistId, int limit) {
         String sql = """
-                SELECT ps.position, s.song_id, s.song_name, a.artist_name, ps.crawl_time
+                SELECT ps.position, s.song_id, s.song_name,
+                       COALESCE(GROUP_CONCAT(DISTINCT a.artist_name ORDER BY a.artist_name SEPARATOR ' / '), '未知歌手') AS artist_name,
+                       s.duration_sec
                 FROM playlist_songs ps
                 JOIN songs s ON s.song_id = ps.song_id
                 LEFT JOIN artist_songs ars ON ars.song_id = s.song_id
                 LEFT JOIN artists a ON a.artist_id = ars.artist_id
                 WHERE ps.playlist_id = ?
+                GROUP BY ps.position, s.song_id, s.song_name, s.duration_sec, ps.id
                 ORDER BY ps.position ASC, ps.id DESC
                 LIMIT ?
                 """;
@@ -122,9 +128,10 @@ public class DashboardService {
 
     public List<Map<String, Object>> getArtistSongs(String artistId, int limit) {
         String sql = """
-                SELECT s.song_id, s.song_name, s.album_name, s.duration_sec, s.publish_time
+                SELECT s.song_id, s.song_name, s.album_name, s.duration_sec, s.publish_time, COALESCE(a.artist_name, ars.artist_id) AS artist_name
                 FROM artist_songs ars
                 JOIN songs s ON s.song_id = ars.song_id
+                LEFT JOIN artists a ON a.artist_id = ars.artist_id
                 WHERE ars.artist_id = ?
                 ORDER BY ars.crawl_time DESC, s.publish_time DESC
                 LIMIT ?
@@ -302,12 +309,12 @@ public class DashboardService {
     }
 
     public Map<String, Object> getOverview() {
-        Integer songCount = jdbcTemplate.queryForObject("SELECT COUNT(*) FROM songs", Integer.class);
-        Integer artistCount = jdbcTemplate.queryForObject("SELECT COUNT(*) FROM artists", Integer.class);
-        Integer playlistCount = jdbcTemplate.queryForObject("SELECT COUNT(*) FROM playlists", Integer.class);
-        Integer rankCount = jdbcTemplate.queryForObject("SELECT COUNT(*) FROM ranks", Integer.class);
-        Integer eventCount = jdbcTemplate.queryForObject("SELECT COUNT(*) FROM fact_play_event", Integer.class);
-        Integer rankSongCount = jdbcTemplate.queryForObject("SELECT COUNT(*) FROM rank_songs", Integer.class);
+        Integer songCount = safeCount("songs");
+        Integer artistCount = safeCount("artists");
+        Integer playlistCount = safeCount("playlists");
+        Integer rankCount = safeCount("ranks");
+        Integer eventCount = safeCount("fact_play_event");
+        Integer rankSongCount = safeCount("rank_songs");
         Map<String, Object> result = new LinkedHashMap<>();
         result.put("songCount", songCount == null ? 0 : songCount);
         result.put("artistCount", artistCount == null ? 0 : artistCount);
@@ -316,6 +323,18 @@ public class DashboardService {
         result.put("playEventCount", eventCount == null ? 0 : eventCount);
         result.put("rankSongCount", rankSongCount == null ? 0 : rankSongCount);
         return result;
+    }
+
+    private Integer safeCount(String tableName) {
+        Integer exists = jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = DATABASE() AND table_name = ?",
+                Integer.class,
+                tableName
+        );
+        if (exists == null || exists == 0) {
+            return 0;
+        }
+        return jdbcTemplate.queryForObject("SELECT COUNT(*) FROM " + tableName, Integer.class);
     }
 
     public List<Map<String, Object>> getTaskLogs() {

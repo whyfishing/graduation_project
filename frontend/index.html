@@ -24,19 +24,26 @@
     #tagChart { width: 100%; height: 280px; }
     .small { color: #6b7280; font-size: 13px; }
     .layout { display: grid; grid-template-columns: 320px 1fr; gap: 16px; }
+    .scroll-pane { max-height: 520px; overflow-y: auto; padding-right: 4px; }
+    .song-table-wrap { max-height: 520px; overflow-y: auto; border: 1px solid #e5e7eb; border-radius: 10px; }
     .list-item { border: 1px solid #e2e8f0; border-radius: 10px; padding: 10px; margin-bottom: 8px; cursor: pointer; }
     .list-item:hover { border-color: #2563eb; }
     .list-item.active { border-color: #0f766e; background: #ecfeff; }
+    .song-row { cursor: pointer; }
+    .song-row:hover { background: #f8fafc; }
+    .song-link { color: #1d4ed8; text-decoration: none; font-weight: 600; }
+    .song-link:hover { text-decoration: underline; }
     .title-row { display: flex; justify-content: space-between; gap: 8px; align-items: center; }
     .muted { color: #64748b; font-size: 12px; }
     .lyric-box { max-height: 200px; overflow: auto; background: #f8fafc; border-radius: 10px; padding: 10px; white-space: pre-wrap; line-height: 1.6; }
     .chip-wrap { display: flex; gap: 8px; flex-wrap: wrap; margin: 8px 0 12px; }
     .chip { background: #dbeafe; color: #1e40af; border-radius: 999px; padding: 4px 10px; font-size: 12px; }
+    .player-box { border: 1px solid #e2e8f0; border-radius: 10px; padding: 12px; background: #fff; margin-bottom: 10px; }
   </style>
 </head>
 <body>
   <div class="container">
-    <div class="card">
+    <div class="card" id="overviewCard">
       <h2>网易云单平台音乐分析系统</h2>
       <p class="small">按需求文档实现“排行榜/歌单/歌手 -> 歌曲列表 -> 分析展示”闭环，支持歌词标签AI生成。</p>
       <div class="toolbar">
@@ -55,32 +62,46 @@
       </div>
     </div>
 
-    <div class="card">
+    <div class="card" id="detailPage" style="display:none;">
+      <div class="title-row">
+        <h3 id="detailSongName">歌曲详情</h3>
+        <button class="secondary" onclick="backToList()">返回列表</button>
+      </div>
+      <p id="detailArtist" class="small">歌手：-</p>
+      <div class="player-box">
+        <iframe id="detailPlayer" frameborder="no" border="0" marginwidth="0" marginheight="0" width="330" height="86"></iframe>
+      </div>
+      <h4>歌词</h4>
+      <div class="lyric-box" id="detailLyric">-</div>
+    </div>
+
+    <div class="card" id="listCard">
       <div class="layout">
         <div>
           <h3 id="leftTitle">推荐列表</h3>
-          <div id="recommendList"></div>
+          <div id="recommendList" class="scroll-pane"></div>
         </div>
         <div>
           <h3 id="songsTitle">歌曲列表</h3>
-          <table>
-            <thead>
-              <tr>
-                <th>序号</th>
-                <th>歌曲ID</th>
-                <th>歌曲名</th>
-                <th>歌手</th>
-                <th>得分/时间</th>
-              </tr>
-            </thead>
-            <tbody id="songBody"></tbody>
-          </table>
+          <div class="song-table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>序号</th>
+                  <th>歌曲名</th>
+                  <th>歌手</th>
+                  <th>时长</th>
+                </tr>
+              </thead>
+              <tbody id="songBody"></tbody>
+            </table>
+          </div>
           <div id="chart"></div>
         </div>
       </div>
     </div>
 
-    <div class="card">
+    <div class="card" id="analysisCard">
       <div class="title-row">
         <h3>歌曲画像分析</h3>
         <button onclick="generateTagsForCurrentSong()">AI生成标签</button>
@@ -103,7 +124,7 @@
       </table>
     </div>
 
-    <div class="card">
+    <div class="card" id="taskCard">
       <h3>任务日志（最近20条）</h3>
       <table>
         <thead>
@@ -129,6 +150,22 @@
     let currentRecommendId = null;
     let currentSongs = [];
     let currentSongId = null;
+
+    function formatDuration(seconds) {
+      const value = Number(seconds || 0);
+      if (!Number.isFinite(value) || value <= 0) return "-";
+      const mm = Math.floor(value / 60).toString().padStart(2, "0");
+      const ss = Math.floor(value % 60).toString().padStart(2, "0");
+      return `${mm}:${ss}`;
+    }
+
+    function buildDetailUrl(songId) {
+      return `${window.location.pathname}?songId=${encodeURIComponent(songId)}`;
+    }
+
+    function buildPlayerUrl(songId) {
+      return `https://music.163.com/outchain/player?type=2&id=${encodeURIComponent(songId)}&auto=1&height=66`;
+    }
 
     async function fetchJson(url) {
       const res = await fetch(url);
@@ -221,12 +258,11 @@
       currentSongs = json.data || [];
       const tbody = document.getElementById("songBody");
       tbody.innerHTML = currentSongs.map((r, i) => `
-        <tr>
+        <tr class="song-row" onclick="selectSong('${r.song_id || ""}')">
           <td>${r.rank_position || r.position || i + 1}</td>
-          <td>${r.song_id || "-"}</td>
-          <td>${r.song_name || "-"}</td>
+          <td>${r.song_id ? `<a class="song-link" href="${buildDetailUrl(r.song_id)}" target="_blank" rel="noopener" onclick="event.stopPropagation()">${r.song_name || "-"}</a>` : (r.song_name || "-")}</td>
           <td>${r.artist_name || "-"}</td>
-          <td>${r.score || r.crawl_time || r.publish_time || "-"}</td>
+          <td>${formatDuration(r.duration_sec)}</td>
         </tr>
       `).join("");
       renderScoreChart(currentSongs);
@@ -257,7 +293,8 @@
       const song = data.song || {};
       const tags = data.tags || [];
       const similar = data.similarSongs || [];
-      document.getElementById("analysisSong").innerText = `${song.song_name || "-"}（${song.song_id || "-"}）`;
+      const artistNames = song.artist_names || "未知歌手";
+      document.getElementById("analysisSong").innerText = `${song.song_name || "-"}｜${artistNames}`;
       document.getElementById("lyricText").innerText = song.lyric_text || "暂无歌词";
       const chips = document.getElementById("tagChips");
       chips.innerHTML = tags.map(t => `<span class="chip">${t.tag_name}</span>`).join("") || "<span class='muted'>暂无标签</span>";
@@ -272,10 +309,36 @@
       document.getElementById("similarBody").innerHTML = similar.map(s => `
         <tr>
           <td>${s.song_id}</td>
-          <td>${s.song_name}</td>
+          <td><a class="song-link" href="${buildDetailUrl(s.song_id)}" target="_blank" rel="noopener">${s.song_name}</a></td>
           <td>${s.similarity_score}</td>
         </tr>
       `).join("");
+    }
+
+    async function loadSongDetailPage(songId) {
+      const json = await fetchJson(`${API_BASE}/songs/${songId}/analysis`);
+      const data = json.data || {};
+      const song = data.song || {};
+      const detailSongName = document.getElementById("detailSongName");
+      const detailArtist = document.getElementById("detailArtist");
+      const detailLyric = document.getElementById("detailLyric");
+      const detailPlayer = document.getElementById("detailPlayer");
+      detailSongName.innerText = song.song_name || songId;
+      detailArtist.innerText = `歌手：${song.artist_names || "未知歌手"}`;
+      detailLyric.innerText = song.lyric_text || "暂无歌词";
+      detailPlayer.src = buildPlayerUrl(songId);
+    }
+
+    function showDetailMode() {
+      document.getElementById("overviewCard").style.display = "none";
+      document.getElementById("listCard").style.display = "none";
+      document.getElementById("analysisCard").style.display = "none";
+      document.getElementById("taskCard").style.display = "none";
+      document.getElementById("detailPage").style.display = "block";
+    }
+
+    function backToList() {
+      window.location.href = window.location.pathname;
     }
 
     async function generateTagsForCurrentSong() {
@@ -316,12 +379,23 @@
       }
     }
 
-    refreshAll();
-    setInterval(loadTasks, 15000);
+    async function initPage() {
+      const songId = new URLSearchParams(window.location.search).get("songId");
+      if (songId) {
+        showDetailMode();
+        await loadSongDetailPage(songId);
+        return;
+      }
+      await refreshAll();
+      setInterval(loadTasks, 15000);
+    }
+
+    initPage();
     window.switchDomain = switchDomain;
     window.selectRecommend = selectRecommend;
     window.selectSong = selectSong;
     window.generateTagsForCurrentSong = generateTagsForCurrentSong;
+    window.backToList = backToList;
   </script>
 </body>
 </html>
