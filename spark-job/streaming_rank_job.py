@@ -26,7 +26,7 @@ MYSQL_PASSWORD = os.getenv("MYSQL_PASSWORD", "root")
 KAFKA_BOOTSTRAP_SERVERS = os.getenv("KAFKA_BOOTSTRAP_SERVERS", "localhost:9092")
 KAFKA_TOPIC = os.getenv("KAFKA_TOPIC", "music_play_event")
 
-SONG_IDS = ["S001", "S002", "S003", "S004", "S005"]
+DEFAULT_SONG_IDS = ["S001", "S002", "S003", "S004", "S005"]
 
 
 def mysql_conn():
@@ -90,16 +90,33 @@ def create_task_log(conn, status, message):
         )
 
 
+def load_song_ids(conn):
+    with conn.cursor() as cursor:
+        cursor.execute("SELECT song_id FROM dim_song")
+        rows = cursor.fetchall()
+    song_ids = [row[0] for row in rows if row and row[0]]
+    return song_ids if song_ids else DEFAULT_SONG_IDS
+
+
 def produce_events():
     """持续生成模拟播放事件，作为实时链路输入。"""
+    conn = mysql_conn()
+    song_ids = load_song_ids(conn)
+    last_refresh = time.time()
     producer = KafkaProducer(
         bootstrap_servers=KAFKA_BOOTSTRAP_SERVERS,
         value_serializer=lambda v: json.dumps(v).encode("utf-8"),
     )
     while True:
+        if time.time() - last_refresh >= 30:
+            try:
+                song_ids = load_song_ids(conn)
+            except Exception:
+                song_ids = song_ids if song_ids else DEFAULT_SONG_IDS
+            last_refresh = time.time()
         event = {
             "user_id": f"U{random.randint(1, 100):03d}",
-            "song_id": random.choice(SONG_IDS),
+            "song_id": random.choice(song_ids),
             "play_time": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
             "play_count": 1,
             "like_count": random.randint(0, 1),

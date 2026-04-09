@@ -486,3 +486,39 @@
 2. 明确了关键数据模型、接口契约、调度策略和容错机制。  
 3. 对毕业设计环境下的性能、安全、可维护性给出了可验证方案。  
 4. 可直接作为后续开发、测试与答辩材料的实施依据。
+
+## 15. 详细设计调整补充（网易云单平台）
+
+### 15.1 功能导航调整
+
+1. 一级菜单收敛为：排行榜、歌单、歌手。  
+2. 每个一级菜单包含推荐列表页、歌曲列表页、画像分析页。  
+3. 右侧增加统一分析面板：tags 分布、文本画像、相似推荐。
+
+### 15.2 数据库设计补充
+
+在当前库设计基础上补充以下业务实体与关系，用于支撑网易云分析链路：
+
+1. songs：以网易云 song_id 为唯一键，存歌曲基础信息与歌词。  
+2. artists：以网易云 artist_id 为唯一键。  
+3. playlists：以网易云 playlist_id 为唯一键。  
+4. users：以网易云 user_id 为唯一键。  
+5. rank_songs：排行榜与歌曲映射（rank_id, song_id, rank_position, crawl_time）。  
+6. playlist_songs：歌单与歌曲映射（playlist_id, song_id, position）。  
+7. artist_songs：歌手与歌曲映射（artist_id, song_id）。  
+8. user_recent_songs：用户最近听歌映射（user_id, song_id, played_at）。  
+9. song_tags：歌曲标签结果（song_id, tag_name, score, source_model, updated_at）。  
+10. user_profiles / playlist_profiles / artist_profiles / rank_profiles：画像结果表（*_id, profile_json, updated_at）。
+
+### 15.3 采集字段映射规则
+
+1. song_id、artist_id、playlist_id、user_id 统一使用网易云URL中的ID。  
+2. 歌曲、歌手、歌单基础信息采用 upsert 写入，保证幂等。  
+3. 映射关系表按“主体ID + song_id”建立唯一约束，避免重复关系。  
+4. 标签生成流程输入 lyric_text，输出 tags 持久化到 song_tags。
+
+### 15.4 阶段实现边界
+
+1. 本阶段不要求跨平台数据统一ID映射。  
+2. 平台切换功能为展示预留，接口默认返回网易云数据。  
+3. 识曲/哼唱能力不作为本次需求调整的主线验收阻断项。  
